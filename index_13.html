@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>TALKCRAB 匠蟹 · 营运 Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root{
+    --red:#C00000;
+    --red-dark:#8f0000;
+    --gold:#D4AF37;
+    --gold-light:#F2E4B8;
+    --cream:#FBF6EC;
+    --ink:#2A2320;
+    --muted:#8A7F6E;
+    --line:#E7DCC0;
+    --white:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background:var(--cream);
+    color:var(--ink);
+  }
+  .topbar{
+    background:linear-gradient(135deg,var(--red) 0%,var(--red-dark) 100%);
+    color:var(--white);
+    padding:22px 28px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .topbar h1{ margin:0; font-size:22px; letter-spacing:.5px; }
+  .topbar .sub{ font-size:12px; opacity:.85; margin-top:4px; }
+  .updated{ text-align:right; font-size:12px; opacity:.9; line-height:1.6; }
+  .langToggle{ display:flex; background:rgba(255,255,255,.15); border-radius:20px; padding:3px; gap:2px; }
+  .langToggle button{ border:none; background:transparent; color:var(--white); font-size:12px; font-weight:700; padding:6px 14px; border-radius:16px; cursor:pointer; font-family:inherit; }
+  .langToggle button.active{ background:var(--white); color:var(--red); }
+  .refresh-note{ background:var(--gold-light); color:#6b5312; font-size:12px; padding:8px 28px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+  .refresh-note button{
+    background:var(--red); color:var(--white); border:none; border-radius:14px;
+    padding:5px 14px; font-size:11px; font-weight:700; cursor:pointer; font-family:inherit;
+  }
+  .refresh-note button:hover{ background:var(--red-dark); }
+  .wrap{ max-width:1180px; margin:0 auto; padding:24px 20px 60px; }
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+  .kpi{ background:var(--white); border:1px solid var(--line); border-top:4px solid var(--gold); border-radius:8px; padding:16px 18px; }
+  .kpi .label{ font-size:12px; color:var(--muted); margin-bottom:6px; }
+  .kpi .value{ font-size:24px; font-weight:700; color:var(--red); }
+  .kpi .value.small{ font-size:18px; }
+  .section{ background:var(--white); border:1px solid var(--line); border-radius:8px; padding:20px 22px; margin-bottom:24px; }
+  .section h2{ font-size:15px; margin:0 0 4px; color:var(--ink); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .section h2 .tag{ font-size:10px; font-weight:700; background:var(--gold); color:var(--white); padding:2px 8px; border-radius:10px; text-decoration:none; cursor:pointer; transition:background .2s; }
+  .section h2 a.tag:hover{ background:var(--red); }
+  .section .desc{ font-size:12px; color:var(--muted); margin-bottom:14px; }
+  .monthPicker{
+    display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap;
+  }
+  .monthPicker button{
+    border:1px solid var(--line); background:var(--cream); color:var(--ink);
+    font-size:12px; font-weight:700; padding:5px 12px; border-radius:14px;
+    cursor:pointer; font-family:inherit;
+  }
+  .monthPicker button.active{ background:var(--red); color:var(--white); border-color:var(--red); }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th,td{ padding:8px 10px; text-align:center; border-bottom:1px solid var(--line); }
+  th{ background:var(--gold-light); color:#6b5312; font-weight:700; }
+  tr:last-child td{ font-weight:700; background:#FBF6EC; }
+  .grid2{ display:grid; grid-template-columns:1.3fr 1fr; gap:20px; }
+  .empty{ text-align:center; color:var(--muted); font-size:12px; padding:18px 0; }
+  .err{ text-align:center; color:var(--red); font-size:12px; padding:18px 0; }
+  canvas{ max-height:260px; }
+  .progressWrap{ margin-top:4px; }
+  .linkRow{ display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .platformLink{
+    display:inline-flex; align-items:center; gap:8px; background:var(--cream);
+    border:1px solid var(--line); border-radius:20px; padding:8px 16px;
+    font-size:13px; font-weight:700; color:var(--ink); text-decoration:none; transition:background .2s;
+  }
+  .platformLink:hover{ background:var(--gold-light); }
+  .platformLink .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .progressLabel{ display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:var(--ink); margin-bottom:6px; }
+  .progressLabel #reviewProgressPct{ color:var(--red); }
+  .progressBar{ width:100%; height:14px; background:var(--gold-light); border-radius:8px; overflow:hidden; }
+  .progressFill{ height:100%; background:linear-gradient(90deg,var(--gold),var(--red)); border-radius:8px; transition:width .4s ease; }
+  #lockScreen{ position:fixed; inset:0; background:linear-gradient(135deg,var(--red) 0%,var(--red-dark) 100%); display:flex; align-items:center; justify-content:center; z-index:999; }
+  #lockBox{ background:var(--white); border-radius:12px; padding:40px 36px; width:320px; max-width:88vw; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  #lockBox .crab{ font-size:34px; margin-bottom:6px; }
+  #lockBox h3{ margin:0 0 4px; font-size:17px; color:var(--red); }
+  #lockBox p{ margin:0 0 18px; font-size:12px; color:var(--muted); }
+  #lockBox input{ width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:6px; font-size:14px; text-align:center; box-sizing:border-box; font-family:inherit; }
+  #lockBox input:focus{ outline:none; border-color:var(--gold); }
+  #lockBox button{ width:100%; margin-top:12px; padding:10px; border:none; border-radius:6px; background:var(--red); color:var(--white); font-weight:700; font-size:14px; cursor:pointer; font-family:inherit; }
+  #lockBox button:hover{ background:var(--red-dark); }
+  #lockError{ color:var(--red); font-size:12px; margin-top:10px; min-height:14px; }
+  #dashboardContent{ display:none; }
+  @media (max-width:900px){
+    .kpis{grid-template-columns:repeat(2,1fr);}
+    .grid2{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div id="lockScreen">
+  <div id="lockBox">
+    <div class="crab">🦀</div>
+    <h3>TALKCRAB 匠蟹</h3>
+    <p>请输入密码查看 Dashboard<br>Enter password to view dashboard</p>
+    <input type="password" id="pwInput" placeholder="密码 / Password" autofocus>
+    <button onclick="checkPassword()">进入 / Enter</button>
+    <div id="lockError"></div>
+  </div>
+</div>
+
+<div id="dashboardContent">
+
+<div class="topbar">
+  <div>
+    <h1 data-i18n="title">TALKCRAB 匠蟹 · 营运 Dashboard</h1>
+    <div class="sub" data-i18n="subtitle">业绩报表 · 零用金 · 现金汇款 · 好评追踪 · 实时读取</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div class="updated" id="updatedAt"></div>
+    <div class="langToggle">
+      <button id="btnZH" class="active" onclick="setLang('zh')">中文</button>
+      <button id="btnEN" onclick="setLang('en')">EN</button>
+    </div>
+  </div>
+</div>
+<div class="refresh-note">
+  <span data-i18n="refreshNote">⏱ 数据每次打开网页时自动从 Google Sheets 读取最新版本 — 你在表格里改的东西，重新整理这个网页就会看到。</span>
+  <button onclick="loadAll()" data-i18n="refreshBtn">🔄 手动刷新</button>
+</div>
+
+<div class="wrap">
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="label" data-i18n="kpiSalesLabel">本月总业绩 (RM)</div>
+      <div class="value" id="kpiSales">-</div>
+    </div>
+    <div class="kpi">
+      <div class="label" data-i18n="kpiPerHeadLabel">本月客单价 (RM)</div>
+      <div class="value small" id="kpiPerHead">-</div>
+    </div>
+    <div class="kpi">
+      <div class="label" data-i18n="kpiPettyLabel">本月零用金支出 (RM)</div>
+      <div class="value small" id="kpiPetty">-</div>
+    </div>
+    <div class="kpi">
+      <div class="label" data-i18n="kpiRemitLabel">7-12月汇款完成率</div>
+      <div class="value small" id="kpiRemit">-</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="section">
+      <h2><span data-i18n="salesTrendTitle">当日业绩趋势</span> <a class="tag" id="salesTag" href="#" target="_blank" rel="noopener">SALES REPORT</a></h2>
+      <div class="desc" id="salesDesc" data-i18n="salesTrendDesc">TALKCRAB SALES REPORT · 每日总业绩 (RM)</div>
+      <div class="monthPicker" id="monthPickerSales"></div>
+      <canvas id="salesChart"></canvas>
+    </div>
+    <div class="section">
+      <h2><span data-i18n="remitTitle">业绩现金汇款汇总</span> <a class="tag" id="remitTag" href="#" target="_blank" rel="noopener">7-12月</a></h2>
+      <div class="desc" data-i18n="remitDesc">业绩现金 / 汇款金额 / 无法汇款金额</div>
+      <table id="remitTable">
+        <thead><tr>
+          <th data-i18n="colMonth">月份</th><th data-i18n="colCash">业绩现金</th>
+          <th data-i18n="colRemitted">汇款金额</th><th data-i18n="colUnable">无法汇款</th>
+        </tr></thead>
+        <tbody><tr><td colspan="4" class="empty" data-i18n="loading">读取中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="section">
+      <h2><span data-i18n="dailyTitle">当日业绩明细</span> <a class="tag" id="dailyTag" href="#" target="_blank" rel="noopener">DAILY DETAIL</a></h2>
+      <div class="desc">DINE IN / DELIVERY / TAKE AWAY / PICKUP</div>
+      <table id="dailyTable">
+        <thead><tr>
+          <th data-i18n="colDate">日期</th><th>Dine in</th><th>Delivery</th><th>Take away</th><th>Pickup</th>
+          <th data-i18n="colPax">Pax</th><th data-i18n="colTotal">Total</th>
+        </tr></thead>
+        <tbody><tr><td colspan="7" class="empty" data-i18n="loading">读取中...</td></tr></tbody>
+      </table>
+    </div>
+    <div class="section">
+      <h2><span data-i18n="pettyTitle">零用金明细</span> <a class="tag" id="pettyTag" href="#" target="_blank" rel="noopener">PETTY CASH</a></h2>
+      <div class="desc" id="pettyDesc" data-i18n="pettyDesc">零用金报表_2026</div>
+      <div class="monthPicker" id="monthPickerPetty"></div>
+      <table id="pettyTable">
+        <thead><tr><th data-i18n="colCategory">类别</th><th data-i18n="colAmount">金额 (RM)</th></tr></thead>
+        <tbody><tr><td colspan="2" class="empty" data-i18n="loading">读取中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2><span data-i18n="foodTitle">食物成本</span> <a class="tag" id="foodTag" href="#" target="_blank" rel="noopener">FOOD COST</a></h2>
+    <div class="desc" data-i18n="foodDesc">厂商采购记录 · 业绩自动取自业绩报表</div>
+    <div class="monthPicker" id="monthPickerFood"></div>
+
+    <div class="kpis" style="grid-template-columns:repeat(3,1fr); margin-bottom:18px;">
+      <div class="kpi">
+        <div class="label" data-i18n="kpiPurchaseLabel">本月采购金额 (RM)</div>
+        <div class="value small" id="kpiPurchase">-</div>
+      </div>
+      <div class="kpi">
+        <div class="label" data-i18n="kpiFoodCostLabel">本月食物成本 (RM)</div>
+        <div class="value small" id="kpiFoodCost">-</div>
+      </div>
+      <div class="kpi">
+        <div class="label" data-i18n="kpiFoodRatioLabel">食物成本率</div>
+        <div class="value small" id="kpiFoodRatio">-</div>
+      </div>
+    </div>
+
+    <table id="foodTable">
+      <thead><tr><th data-i18n="colDate">日期</th><th data-i18n="colVendor">厂商</th><th data-i18n="colAmount">金额 (RM)</th></tr></thead>
+      <tbody><tr><td colspan="3" class="empty" data-i18n="loading">读取中...</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2><span data-i18n="reviewTitle">好评追踪</span> <a class="tag" id="reviewTag" href="https://docs.google.com/spreadsheets/d/1TfBL5mX5xKV0OnbGNeCfBvyM-_xE6CGN/edit" target="_blank" rel="noopener">REVIEW TRACKER</a></h2>
+    <div class="desc" data-i18n="reviewDesc">TALKCRAB_好评追踪表 · 目标 450 (Google 250 / 小红书 150 / 大众点评 50)</div>
+
+    <div class="linkRow">
+      <a href="https://share.google/oTLTaUFTL44OQICJb" target="_blank" rel="noopener" class="platformLink">
+        <span class="dot" style="background:#4285F4;"></span> Google <span data-i18n="linkCheck">评论页 →</span>
+      </a>
+      <a href="https://www.dianping.com/shop/k7lta3i7Iwsatww4" target="_blank" rel="noopener" class="platformLink">
+        <span class="dot" style="background:#FF6633;"></span> <span data-i18n="colDianping">大众点评</span> <span data-i18n="linkCheck">评论页 →</span>
+      </a>
+    </div>
+
+    <div class="progressWrap">
+      <div class="progressLabel">
+        <span id="reviewProgressText">- / 450</span>
+        <span id="reviewProgressPct">-</span>
+      </div>
+      <div class="progressBar"><div class="progressFill" id="reviewProgressFill" style="width:0%"></div></div>
+    </div>
+
+    <div class="grid2" style="margin-top:18px;">
+      <table id="reviewPlatformTable">
+        <thead><tr><th data-i18n="colPlatform">平台</th><th data-i18n="colTarget">目标</th><th data-i18n="colDone">已完成</th><th data-i18n="colLeft">剩余</th></tr></thead>
+        <tbody><tr><td colspan="4" class="empty" data-i18n="loading">读取中...</td></tr></tbody>
+      </table>
+      <table id="reviewStaffTable">
+        <thead><tr><th data-i18n="colStaff">员工</th><th>Google</th><th data-i18n="colXHS">小红书</th><th data-i18n="colDianping">大众点评</th><th data-i18n="colTotal">总计</th></tr></thead>
+        <tbody><tr><td colspan="5" class="empty" data-i18n="loading">读取中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ---- CSV 数据源 ----
+const SALES_CSV = {
+  7:  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIp2-3a8bPsfMTb45nguW_9ZAyXsc8P0mjWfbMjZJ_A7xbuNQkzSD1eG4lYiSq5g/pub?gid=137455480&single=true&output=csv",
+  8:  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIp2-3a8bPsfMTb45nguW_9ZAyXsc8P0mjWfbMjZJ_A7xbuNQkzSD1eG4lYiSq5g/pub?gid=1315121093&single=true&output=csv",
+  9:  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIp2-3a8bPsfMTb45nguW_9ZAyXsc8P0mjWfbMjZJ_A7xbuNQkzSD1eG4lYiSq5g/pub?gid=859475979&single=true&output=csv",
+  10: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIp2-3a8bPsfMTb45nguW_9ZAyXsc8P0mjWfbMjZJ_A7xbuNQkzSD1eG4lYiSq5g/pub?gid=1245761165&single=true&output=csv",
+  11: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIp2-3a8bPsfMTb45nguW_9ZAyXsc8P0mjWfbMjZJ_A7xbuNQkzSD1eG4lYiSq5g/pub?gid=102861271&single=true&output=csv",
+  12: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIp2-3a8bPsfMTb45nguW_9ZAyXsc8P0mjWfbMjZJ_A7xbuNQkzSD1eG4lYiSq5g/pub?gid=308342362&single=true&output=csv",
+};
+const PETTY_CSV = {
+  7:  "https://docs.google.com/spreadsheets/d/e/2PACX-1vThF_nSmW2aiOhxeuEXRkJzXpt-J2gaAgFNibZcwv7nogNVhKI-aqgimvTkv-0cDQ/pub?gid=602166538&single=true&output=csv",
+  8:  "https://docs.google.com/spreadsheets/d/e/2PACX-1vThF_nSmW2aiOhxeuEXRkJzXpt-J2gaAgFNibZcwv7nogNVhKI-aqgimvTkv-0cDQ/pub?gid=1008242277&single=true&output=csv",
+  9:  "https://docs.google.com/spreadsheets/d/e/2PACX-1vThF_nSmW2aiOhxeuEXRkJzXpt-J2gaAgFNibZcwv7nogNVhKI-aqgimvTkv-0cDQ/pub?gid=950920463&single=true&output=csv",
+  10: "https://docs.google.com/spreadsheets/d/e/2PACX-1vThF_nSmW2aiOhxeuEXRkJzXpt-J2gaAgFNibZcwv7nogNVhKI-aqgimvTkv-0cDQ/pub?gid=1282413314&single=true&output=csv",
+  11: "https://docs.google.com/spreadsheets/d/e/2PACX-1vThF_nSmW2aiOhxeuEXRkJzXpt-J2gaAgFNibZcwv7nogNVhKI-aqgimvTkv-0cDQ/pub?gid=1955453308&single=true&output=csv",
+  12: "https://docs.google.com/spreadsheets/d/e/2PACX-1vThF_nSmW2aiOhxeuEXRkJzXpt-J2gaAgFNibZcwv7nogNVhKI-aqgimvTkv-0cDQ/pub?gid=188416129&single=true&output=csv",
+};
+const REMIT_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPxIho35KRCuXSgZes5btH2RepFfu5NLPAs0d-kNPeC9f9YD6C4ONJU1QsZyELhw/pub?gid=846884846&single=true&output=csv";
+const REVIEW_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTVXf4EiZfb-qmbqqo9O1JZikG2ZMbFkOqUk3aNm_OCzq797kC2zbPoFYSZAkgrYA/pub?gid=1582303184&single=true&output=csv";
+const FOODCOST_CSV = {
+  7:  "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1Yl3JFGckAxj-HZYd44ApuSersnKWQXcCpKaHCjLSJcZ7qhelHRmQb1EcNZc1NA/pub?gid=668388263&single=true&output=csv",
+  8:  "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1Yl3JFGckAxj-HZYd44ApuSersnKWQXcCpKaHCjLSJcZ7qhelHRmQb1EcNZc1NA/pub?gid=508612396&single=true&output=csv",
+  9:  "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1Yl3JFGckAxj-HZYd44ApuSersnKWQXcCpKaHCjLSJcZ7qhelHRmQb1EcNZc1NA/pub?gid=103081336&single=true&output=csv",
+  10: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1Yl3JFGckAxj-HZYd44ApuSersnKWQXcCpKaHCjLSJcZ7qhelHRmQb1EcNZc1NA/pub?gid=1905050590&single=true&output=csv",
+  11: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1Yl3JFGckAxj-HZYd44ApuSersnKWQXcCpKaHCjLSJcZ7qhelHRmQb1EcNZc1NA/pub?gid=606232206&single=true&output=csv",
+  12: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1Yl3JFGckAxj-HZYd44ApuSersnKWQXcCpKaHCjLSJcZ7qhelHRmQb1EcNZc1NA/pub?gid=1809472423&single=true&output=csv",
+};
+
+const SHEET_LINKS = {
+  sales: "https://docs.google.com/spreadsheets/d/1I9bgFapVNw0DxFgqcnnt7j4Ls_5a4onu/edit",
+  remit: "https://docs.google.com/spreadsheets/d/19LUSdUY2HKzGnPlWCDbi_bkUVXe_Ke0S/edit",
+  petty: "https://docs.google.com/spreadsheets/d/1KuJFKaN4GA7S7V_2fd7CI54BrFYU5viG/edit",
+  review: "https://docs.google.com/spreadsheets/d/1TfBL5mX5xKV0OnbGNeCfBvyM-_xE6CGN/edit",
+};
+document.getElementById("salesTag").href = SHEET_LINKS.sales;
+document.getElementById("dailyTag").href = SHEET_LINKS.sales;
+document.getElementById("remitTag").href = SHEET_LINKS.remit;
+document.getElementById("pettyTag").href = SHEET_LINKS.petty;
+
+const MONTH_NAMES_ZH = {7:"七月",8:"八月",9:"九月",10:"十月",11:"十一月",12:"十二月"};
+const MONTH_NAMES_EN = {7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"};
+
+let currentSalesMonth = 7;
+let currentPettyMonth = 7;
+let currentFoodMonth = 7;
+const monthlySalesTotals = {}; // 由 loadSales 填入,供食物成本率计算使用
+(function(){
+  const now = new Date();
+  if(now.getFullYear()===2026 && now.getMonth()+1>=7 && now.getMonth()+1<=12){
+    currentSalesMonth = now.getMonth()+1;
+    currentPettyMonth = now.getMonth()+1;
+    currentFoodMonth = now.getMonth()+1;
+  }
+})();
+
+// ---- i18n ----
+let currentLang = "zh";
+const i18n = {
+  zh: {
+    title: "TALKCRAB 匠蟹 · 营运 Dashboard",
+    subtitle: "业绩报表 · 零用金 · 现金汇款 · 好评追踪 · 实时读取",
+    refreshNote: "⏱ 数据每次打开网页时自动从 Google Sheets 读取最新版本 — 你在表格里改的东西，重新整理这个网页就会看到。",
+    refreshBtn: "🔄 手动刷新",
+    loading: "读取中...",
+    fetchError: "读取失败，请确认该表已发布到网络",
+    updatedLabel: "最近读取时间",
+    kpiSalesLabel: "本月总业绩 (RM)",
+    kpiPerHeadLabel: "本月客单价 (RM)",
+    kpiPettyLabel: "本月零用金支出 (RM)",
+    kpiRemitLabel: "7-12月汇款完成率",
+    salesTrendTitle: "当日业绩趋势",
+    salesTrendDesc: "TALKCRAB SALES REPORT · 每日总业绩 (RM)",
+    remitTitle: "业绩现金汇款汇总",
+    remitDesc: "业绩现金 / 汇款金额 / 无法汇款金额",
+    dailyTitle: "当日业绩明细",
+    pettyTitle: "零用金明细",
+    pettyDesc: "零用金报表_2026",
+    colMonth: "月份", colCash: "业绩现金", colRemitted: "汇款金额", colUnable: "无法汇款",
+    colDate: "日期", colPax: "Pax", colTotal: "Total",
+    colCategory: "类别", colAmount: "金额 (RM)",
+    totalLabel: "总计", noData: "暂无数据",
+    months: ["七月","八月","九月","十月","十一月","十二月"],
+    chartLabel: "当日总业绩 (RM)",
+    foodTitle: "食物成本",
+    foodDesc: "厂商采购记录 · 业绩自动取自业绩报表",
+    kpiPurchaseLabel: "本月采购金额 (RM)",
+    kpiFoodCostLabel: "本月食物成本 (RM)",
+    kpiFoodRatioLabel: "食物成本率",
+    colVendor: "厂商",
+    reviewTitle: "好评追踪",
+    reviewDesc: "TALKCRAB_好评追踪表 · 目标 450 (Google 250 / 小红书 150 / 大众点评 50)",
+    colPlatform: "平台", colTarget: "目标", colDone: "已完成", colLeft: "剩余",
+    colStaff: "员工", colXHS: "小红书", colDianping: "大众点评",
+    linkCheck: "评论页 →",
+  },
+  en: {
+    title: "TALKCRAB · Operations Dashboard",
+    subtitle: "Sales · Petty Cash · Remittance · Reviews · Live",
+    refreshNote: "⏱ Data is fetched fresh from Google Sheets every time this page loads — edits in the sheet show up on refresh.",
+    refreshBtn: "🔄 Refresh Now",
+    loading: "Loading...",
+    fetchError: "Failed to load — check the sheet is published to web",
+    updatedLabel: "Last loaded at",
+    kpiSalesLabel: "Month Total Sales (RM)",
+    kpiPerHeadLabel: "Month Spend / Head (RM)",
+    kpiPettyLabel: "Month Petty Cash Spent (RM)",
+    kpiRemitLabel: "Jul-Dec Remittance Rate",
+    salesTrendTitle: "Daily Sales Trend",
+    salesTrendDesc: "TALKCRAB SALES REPORT · Daily Total Sales (RM)",
+    remitTitle: "Cash Remittance Summary",
+    remitDesc: "Performance Cash / Remitted / Unremitted",
+    dailyTitle: "Daily Sales Detail",
+    pettyTitle: "Petty Cash Detail",
+    pettyDesc: "Petty Cash Report 2026",
+    colMonth: "Month", colCash: "Cash", colRemitted: "Remitted", colUnable: "Unable to Remit",
+    colDate: "Date", colPax: "Pax", colTotal: "Total",
+    colCategory: "Category", colAmount: "Amount (RM)",
+    totalLabel: "Total", noData: "No data yet",
+    months: ["Jul","Aug","Sep","Oct","Nov","Dec"],
+    chartLabel: "Daily Total Sales (RM)",
+    foodTitle: "Food Cost",
+    foodDesc: "Vendor Purchase Records · Sales auto-pulled from Sales Report",
+    kpiPurchaseLabel: "Month Purchase Amount (RM)",
+    kpiFoodCostLabel: "Month Food Cost (RM)",
+    kpiFoodRatioLabel: "Food Cost Ratio",
+    colVendor: "Vendor",
+    reviewTitle: "Positive Review Tracker",
+    reviewDesc: "TALKCRAB Review Tracker · Target 450 (Google 250 / Xiaohongshu 150 / Dianping 50)",
+    colPlatform: "Platform", colTarget: "Target", colDone: "Done", colLeft: "Remaining",
+    colStaff: "Staff", colXHS: "Xiaohongshu", colDianping: "Dianping",
+    linkCheck: "Reviews →",
+  }
+};
+
+let salesChart = null;
+const fmt = v => (v===null||v===undefined||isNaN(v)) ? "-" : Number(v).toLocaleString("en-MY",{minimumFractionDigits:2});
+const num = v => { if(v===undefined||v===null) return NaN; const n = parseFloat(String(v).replace(/[^0-9.\-]/g,"")); return isNaN(n)?NaN:n; };
+
+const CORS_PROXIES = [
+  url => "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
+  url => "https://corsproxy.io/?url=" + encodeURIComponent(url),
+  url => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(url),
+];
+
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+async function fetchCSVOnce(url){
+  let lastErr;
+  // 1. 先试直接读取
+  try{
+    const res = await fetch(url, {cache:"no-store"});
+    if(res.ok){
+      const text = await res.text();
+      if(text && !text.trim().startsWith("<")) return Papa.parse(text, {header:false, skipEmptyLines:true}).data;
+    }
+  }catch(e){ lastErr = e; }
+  // 2. 直接读取被 CORS 挡住，改走代理，三个轮流试
+  for(const makeUrl of CORS_PROXIES){
+    try{
+      const res = await fetch(makeUrl(url), {cache:"no-store"});
+      if(!res.ok) continue;
+      const text = await res.text();
+      if(!text || text.trim().startsWith("<")) continue;
+      return Papa.parse(text, {header:false, skipEmptyLines:true}).data;
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error("fetch failed");
+}
+
+// 整体重试：直接读取+三个代理都失败时，间隔一下再整套重来，最多3轮
+async function fetchCSV(url, attempts=3){
+  let lastErr;
+  for(let i=0;i<attempts;i++){
+    try{
+      return await fetchCSVOnce(url);
+    }catch(e){
+      lastErr = e;
+      if(i < attempts-1) await sleep(800 + i*700);
+    }
+  }
+  throw lastErr;
+}
+
+// 在原始行数组中动态找到真正的标题行 (跳过标题/汇总说明行)
+// patternMap: {name: regex}；返回 {headerRowIndex, cols:{name:colIndex}, dataRows}
+function locateTable(rawRows, patternMap){
+  const names = Object.keys(patternMap);
+  const toArr = p => Array.isArray(p) ? p : [p];
+  const matches = (p, str) => typeof p === "function" ? p(str) : p.test(str);
+  for(let i=0;i<rawRows.length;i++){
+    const row = rawRows[i];
+    const cols = {};
+    let matchCount = 0;
+    for(const name of names){
+      const patterns = toArr(patternMap[name]);
+      let idx = -1;
+      for(const p of patterns){
+        idx = row.findIndex(cellV => matches(p, (cellV||"").toString().trim()));
+        if(idx>=0) break;
+      }
+      if(idx>=0){ cols[name]=idx; matchCount++; }
+    }
+    // 防呆：如果好几个栏位名字都撞到同一格（通常是说明文字塞了好几个关键字），
+    // 这不是真正的表头行，跳过继续找下一行
+    const usedIdx = Object.values(cols);
+    const uniqueIdx = new Set(usedIdx);
+    if(uniqueIdx.size < usedIdx.length) continue;
+    if(matchCount >= Math.max(2, Math.ceil(names.length*0.5))){
+      return { headerRowIndex:i, cols, dataRows: rawRows.slice(i+1) };
+    }
+  }
+  return null;
+}
+const cell = (row, idx) => idx===undefined ? undefined : row[idx];
+
+function diagMsg(e, t){
+  const msg = (e && e.message) || "";
+  if(msg === "no header") return currentLang==="zh" ? "找不到标题行，栏位名字可能对不上，需要核对" : "Header row not found — column names may not match";
+  return currentLang==="zh" ? "网络读取失败（可能是跨域限制），检查发布设置或网络" : "Network fetch failed (possibly CORS) — check publish settings or connection";
+}
+
+// ---- 渲染: 业绩报表 ----
+async function loadSales(month){
+  const t = i18n[currentLang];
+  document.querySelector("#dailyTable tbody").innerHTML = `<tr><td colspan="7" class="empty">${t.loading}</td></tr>`;
+  try{
+    const rawRows = await fetchCSV(SALES_CSV[month]);
+    if(!rawRows.length) throw new Error("empty");
+    const table = locateTable(rawRows, {
+      date: /^date$|日期/i,
+      dinein: /^dine\s*in$/i,
+      delivery: /^delivery$/i,
+      takeaway: /take.?away/i,
+      pickup: /pickup/i,
+      pax: [/total\s*today\s*pax/i, /pax/i, /人数|客数/i],
+      total: [
+        /total\s*today\s*sales/i,
+        s => /total/i.test(s) && /sale/i.test(s),
+        s => /total/i.test(s) && !/pax/i.test(s) && !/head/i.test(s),
+      ],
+    });
+    if(!table) throw new Error("no header");
+    console.log("Sales header row:", rawRows[table.headerRowIndex], "cols:", table.cols);
+    const { cols, dataRows } = table;
+
+    const daily = [];
+    for(const r of dataRows){
+      const dateVal = cell(r, cols.date);
+      if(!dateVal || !String(dateVal).trim()) continue;
+      if(/total|总计/i.test(String(dateVal))) continue;
+      const dinein = num(cell(r,cols.dinein)) || 0;
+      const delivery = num(cell(r,cols.delivery)) || 0;
+      const takeaway = num(cell(r,cols.takeaway)) || 0;
+      const pickup = num(cell(r,cols.pickup)) || 0;
+      const pax = num(cell(r,cols.pax)) || 0;
+      let total = num(cell(r,cols.total));
+      if(isNaN(total)) total = dinein+delivery+takeaway+pickup;
+      if(dinein===0 && delivery===0 && takeaway===0 && pickup===0 && total===0) continue;
+      daily.push({date:String(dateVal).trim(), dinein, delivery, takeaway, pickup, pax, total});
+    }
+
+    const tbody = document.querySelector("#dailyTable tbody");
+    tbody.innerHTML = "";
+    if(daily.length===0){
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${t.noData}</td></tr>`;
+    }else{
+      daily.forEach(d=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${d.date}</td><td>${fmt(d.dinein)}</td><td>${fmt(d.delivery)}</td><td>${fmt(d.takeaway)}</td><td>${fmt(d.pickup)}</td><td>${d.pax}</td><td><b>${fmt(d.total)}</b></td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    const monthTotal = daily.reduce((s,d)=>s+d.total,0);
+    monthlySalesTotals[month] = monthTotal;
+    const totalPax = daily.reduce((s,d)=>s+d.pax,0);
+    document.getElementById("kpiSales").textContent = "RM " + monthTotal.toLocaleString("en-MY",{minimumFractionDigits:2});
+    document.getElementById("kpiPerHead").textContent = totalPax>0 ? "RM " + (monthTotal/totalPax).toFixed(2) : "-";
+
+    if(salesChart) salesChart.destroy();
+    salesChart = new Chart(document.getElementById("salesChart"), {
+      type:"bar",
+      data:{ labels: daily.map(d=>d.date), datasets:[{ label:t.chartLabel, data: daily.map(d=>d.total), backgroundColor:"#D4AF37", borderRadius:4 }] },
+      options:{ plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>"RM "+v } } } }
+    });
+  }catch(e){
+    console.error("loadSales error:", e);
+    document.querySelector("#dailyTable tbody").innerHTML = `<tr><td colspan="7" class="err">${diagMsg(e,t)}</td></tr>`;
+    document.getElementById("kpiSales").textContent = "-";
+    document.getElementById("kpiPerHead").textContent = "-";
+    if(salesChart){ salesChart.destroy(); salesChart=null; }
+  }
+}
+
+// ---- 渲染: 零用金 ----
+async function loadPetty(month){
+  const t = i18n[currentLang];
+  document.querySelector("#pettyTable tbody").innerHTML = `<tr><td colspan="2" class="empty">${t.loading}</td></tr>`;
+  try{
+    const rawRows = await fetchCSV(PETTY_CSV[month]);
+    if(!rawRows.length) throw new Error("empty");
+    const table = locateTable(rawRows, {
+      category: /类别|分类|category|项目|说明/i,
+      amount: /金额|amount|数额/i,
+    });
+    if(!table) throw new Error("no header");
+    console.log("Petty header row:", rawRows[table.headerRowIndex], "cols:", table.cols);
+    const { cols, dataRows } = table;
+
+    const totals = {};
+    let grand = 0;
+    for(const r of dataRows){
+      const cat = (cell(r,cols.category)||"").toString().trim();
+      const amt = num(cell(r,cols.amount));
+      if(!cat || isNaN(amt) || /合计|总计|小计|subtotal|total/i.test(cat)) continue;
+      totals[cat] = (totals[cat]||0) + amt;
+      grand += amt;
+    }
+
+    const tbody = document.querySelector("#pettyTable tbody");
+    tbody.innerHTML = "";
+    const cats = Object.keys(totals);
+    if(cats.length===0){
+      tbody.innerHTML = `<tr><td colspan="2" class="empty">${t.noData}</td></tr>`;
+    }else{
+      cats.forEach(c=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${c}</td><td>${fmt(totals[c])}</td>`;
+        tbody.appendChild(tr);
+      });
+      const totalRow = document.createElement("tr");
+      totalRow.innerHTML = `<td>${t.totalLabel}</td><td>${fmt(grand)}</td>`;
+      tbody.appendChild(totalRow);
+    }
+    document.getElementById("kpiPetty").textContent = "RM " + grand.toLocaleString("en-MY",{minimumFractionDigits:2});
+  }catch(e){
+    console.error("loadPetty error:", e);
+    document.querySelector("#pettyTable tbody").innerHTML = `<tr><td colspan="2" class="err">${diagMsg(e,t)}</td></tr>`;
+    document.getElementById("kpiPetty").textContent = "-";
+  }
+}
+
+// ---- 渲染: 汇款汇总 ----
+async function loadRemit(){
+  const t = i18n[currentLang];
+  const tbody = document.querySelector("#remitTable tbody");
+  tbody.innerHTML = `<tr><td colspan="4" class="empty">${t.loading}</td></tr>`;
+  try{
+    const rawRows = await fetchCSV(REMIT_CSV);
+    const table = locateTable(rawRows, {
+      month: /月份|month/i,
+      cash: /业绩现金|^cash$/i,
+      remitted: /汇款金额|remitted/i,
+      unable: /无法汇款|unable/i,
+    });
+    if(!table) throw new Error("no header");
+    console.log("Remit header row:", rawRows[table.headerRowIndex], "cols:", table.cols);
+    const { cols, dataRows } = table;
+
+    tbody.innerHTML = "";
+    let totalCash=0, totalRemit=0;
+    let any = false;
+    for(let i=0; i<dataRows.length && i<6; i++){
+      const r = dataRows[i];
+      const rawLabel = cell(r,cols.month);
+      // 月份栏位辨识失败时,固定按七月~十二月顺序标记 (这份表结构已知一定是6个月份依序排列)
+      const isRealLabel = rawLabel && String(rawLabel).trim() && !/合计|总计|小计|subtotal|total/i.test(String(rawLabel));
+      const m = isRealLabel ? String(rawLabel).trim() : t.months[i];
+
+      const cash = num(cell(r,cols.cash));
+      const remit = num(cell(r,cols.remitted));
+      const unable = num(cell(r,cols.unable));
+      if(isNaN(cash) && isNaN(remit) && isNaN(unable)) continue; // 该月完全没填数据就跳过
+      if(!isNaN(cash)) totalCash += cash;
+      if(!isNaN(remit)) totalRemit += remit;
+      any = true;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${m}</td><td>${fmt(cash)}</td><td>${fmt(remit)}</td><td>${fmt(unable)}</td>`;
+      tbody.appendChild(tr);
+    }
+    if(!any){
+      tbody.innerHTML = `<tr><td colspan="4" class="empty">${t.noData}</td></tr>`;
+    }else{
+      const totalRow = document.createElement("tr");
+      totalRow.innerHTML = `<td>${t.totalLabel}</td><td>${fmt(totalCash)}</td><td>${fmt(totalRemit)}</td><td>-</td>`;
+      tbody.appendChild(totalRow);
+    }
+    document.getElementById("kpiRemit").textContent = totalCash>0 ? ((totalRemit/totalCash)*100).toFixed(1)+"%" : "-";
+  }catch(e){
+    console.error("loadRemit error:", e);
+    tbody.innerHTML = `<tr><td colspan="4" class="err">${diagMsg(e,t)}</td></tr>`;
+    document.getElementById("kpiRemit").textContent = "-";
+  }
+}
+
+// ---- 渲染: 好评追踪 ----
+async function loadReview(){
+  const t = i18n[currentLang];
+  const platBody = document.querySelector("#reviewPlatformTable tbody");
+  const staffBody = document.querySelector("#reviewStaffTable tbody");
+  platBody.innerHTML = `<tr><td colspan="4" class="empty">${t.loading}</td></tr>`;
+  staffBody.innerHTML = `<tr><td colspan="5" class="empty">${t.loading}</td></tr>`;
+  try{
+    const rawRows = await fetchCSV(REVIEW_CSV);
+    const table = locateTable(rawRows, {
+      name: /员工|staff|姓名|name/i,
+      google: /google/i,
+      xhs: /小红书|xhs|xiaohongshu/i,
+      dianping: /大众点评|dianping/i,
+    });
+    if(!table) throw new Error("no header");
+    console.log("Review header row:", rawRows[table.headerRowIndex], "cols:", table.cols, "dataRows sample:", rawRows.slice(table.headerRowIndex+1, table.headerRowIndex+6));
+    const { cols, dataRows } = table;
+    const targetGoogle=250, targetXHS=150, targetDianping=50;
+
+    staffBody.innerHTML = "";
+    let doneG=0, doneX=0, doneD=0;
+    let any=false;
+    let sawData=false;
+    for(const r of dataRows){
+      const name = (cell(r,cols.name)||"").toString().trim();
+      if(!name){
+        if(sawData) break; // 员工列表读完、遇到空行就停止，避免读到下面的摘要区块
+        continue;
+      }
+      if(/目标|已完成|剩余|总计|target|remaining|done|total/i.test(name)) continue;
+      if(name.length > 15) continue; // 太长的通常是备注说明文字，不是员工名
+      const g = num(cell(r,cols.google))||0, x = num(cell(r,cols.xhs))||0, d = num(cell(r,cols.dianping))||0;
+      doneG+=g; doneX+=x; doneD+=d;
+      any=true;
+      sawData=true;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${name}</td><td>${g}</td><td>${x}</td><td>${d}</td><td><b>${g+x+d}</b></td>`;
+      staffBody.appendChild(tr);
+    }
+    if(!any) staffBody.innerHTML = `<tr><td colspan="5" class="empty">${t.noData}</td></tr>`;
+
+    const totalTarget = targetGoogle+targetXHS+targetDianping;
+    const totalDone = doneG+doneX+doneD;
+    const pct = totalTarget ? Math.round((totalDone/totalTarget)*100) : 0;
+    document.getElementById("reviewProgressText").textContent = `${totalDone} / ${totalTarget}`;
+    document.getElementById("reviewProgressPct").textContent = pct+"%";
+    document.getElementById("reviewProgressFill").style.width = pct+"%";
+
+    platBody.innerHTML = "";
+    [["Google",targetGoogle,doneG],[t.colXHS,targetXHS,doneX],[t.colDianping,targetDianping,doneD]].forEach(([n,tg,dn])=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${n}</td><td>${tg}</td><td>${dn}</td><td>${tg-dn}</td>`;
+      platBody.appendChild(tr);
+    });
+    const totalRow = document.createElement("tr");
+    totalRow.innerHTML = `<td>${t.totalLabel}</td><td>${totalTarget}</td><td>${totalDone}</td><td>${totalTarget-totalDone}</td>`;
+    platBody.appendChild(totalRow);
+  }catch(e){
+    console.error("loadReview error:", e);
+    platBody.innerHTML = `<tr><td colspan="4" class="err">${diagMsg(e,t)}</td></tr>`;
+    staffBody.innerHTML = `<tr><td colspan="5" class="err">${diagMsg(e,t)}</td></tr>`;
+  }
+}
+
+// ---- 辅助: 取得某月业绩总额 (供食物成本率使用,有缓存) ----
+async function getMonthSalesTotal(month){
+  if(monthlySalesTotals[month] !== undefined) return monthlySalesTotals[month];
+  try{
+    const rawRows = await fetchCSV(SALES_CSV[month]);
+    const table = locateTable(rawRows, {
+      date: /^date$|日期/i,
+      dinein: /^dine\s*in$/i,
+      delivery: /^delivery$/i,
+      takeaway: /take.?away/i,
+      pickup: /pickup/i,
+      total: [
+        /total\s*today\s*sales/i,
+        s => /total/i.test(s) && /sale/i.test(s),
+        s => /total/i.test(s) && !/pax/i.test(s) && !/head/i.test(s),
+      ],
+    });
+    if(!table) { monthlySalesTotals[month] = 0; return 0; }
+    const { cols, dataRows } = table;
+    let sum = 0;
+    for(const r of dataRows){
+      const dateVal = cell(r, cols.date);
+      if(!dateVal || !String(dateVal).trim()) continue;
+      if(/total|总计/i.test(String(dateVal))) continue;
+      const dinein = num(cell(r,cols.dinein)) || 0;
+      const delivery = num(cell(r,cols.delivery)) || 0;
+      const takeaway = num(cell(r,cols.takeaway)) || 0;
+      const pickup = num(cell(r,cols.pickup)) || 0;
+      let total = num(cell(r,cols.total));
+      if(isNaN(total)) total = dinein+delivery+takeaway+pickup;
+      if(dinein===0 && delivery===0 && takeaway===0 && pickup===0 && total===0) continue;
+      sum += total;
+    }
+    monthlySalesTotals[month] = sum;
+    return sum;
+  }catch(e){
+    return undefined;
+  }
+}
+
+// ---- 渲染: 食物成本 (厂商采购记录) ----
+async function loadFoodCost(month){
+  const t = i18n[currentLang];
+  const tbody = document.querySelector("#foodTable tbody");
+  tbody.innerHTML = `<tr><td colspan="3" class="empty">${t.loading}</td></tr>`;
+  document.getElementById("kpiPurchase").textContent = "-";
+  document.getElementById("kpiFoodCost").textContent = "-";
+  document.getElementById("kpiFoodRatio").textContent = "-";
+  const url = FOODCOST_CSV[month];
+  if(!url){
+    tbody.innerHTML = `<tr><td colspan="3" class="empty">${t.noData}</td></tr>`;
+    return;
+  }
+  try{
+    const rawRows = await fetchCSV(url);
+    // 表头行含"日期"以及多组"厂商N名字"/"采购N金额"栏位
+    let headerRowIdx = -1;
+    for(let i=0;i<rawRows.length;i++){
+      const row = rawRows[i];
+      const hasDate = row.some(c => /^日期$/i.test((c||"").toString().trim()));
+      const hasVendor = row.some(c => /厂商\d*名字|vendor/i.test((c||"").toString().trim()));
+      if(hasDate && hasVendor){ headerRowIdx = i; break; }
+    }
+    if(headerRowIdx < 0) throw new Error("no header");
+    const headerRow = rawRows[headerRowIdx];
+    const dateIdx = headerRow.findIndex(c => /^日期$/i.test((c||"").toString().trim()));
+    const pairs = [];
+    headerRow.forEach((c, idx) => {
+      if(/厂商\d*名字/i.test((c||"").toString().trim())){
+        pairs.push({ vendorIdx: idx, priceIdx: idx+1 });
+      }
+    });
+    const dataRows = rawRows.slice(headerRowIdx+1);
+
+    const purchases = [];
+    for(const r of dataRows){
+      const dateVal = (cell(r,dateIdx)||"").toString().trim();
+      if(!dateVal) continue;
+      if(/合计|总计|小计|subtotal|total/i.test(dateVal)) continue;
+      for(const p of pairs){
+        const vendor = (cell(r,p.vendorIdx)||"").toString().trim();
+        const amt = num(cell(r,p.priceIdx));
+        if(!vendor && (isNaN(amt) || amt===0)) continue;
+        if(isNaN(amt) || amt===0) continue;
+        purchases.push({ date: dateVal, vendor: vendor || "-", amount: amt });
+      }
+    }
+
+    tbody.innerHTML = "";
+    if(purchases.length===0){
+      tbody.innerHTML = `<tr><td colspan="3" class="empty">${t.noData}</td></tr>`;
+    }else{
+      purchases.forEach(p=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${p.date}</td><td>${p.vendor}</td><td>${fmt(p.amount)}</td>`;
+        tbody.appendChild(tr);
+      });
+      const totalRow = document.createElement("tr");
+      const grand = purchases.reduce((s,p)=>s+p.amount,0);
+      totalRow.innerHTML = `<td colspan="2">${t.totalLabel}</td><td>${fmt(grand)}</td>`;
+      tbody.appendChild(totalRow);
+    }
+
+    const foodCost = purchases.reduce((s,p)=>s+p.amount,0);
+    document.getElementById("kpiPurchase").textContent = "RM " + foodCost.toLocaleString("en-MY",{minimumFractionDigits:2});
+    document.getElementById("kpiFoodCost").textContent = "RM " + foodCost.toLocaleString("en-MY",{minimumFractionDigits:2});
+
+    const salesTotal = await getMonthSalesTotal(month);
+    if(salesTotal && salesTotal>0){
+      const ratio = foodCost / (salesTotal*0.94);
+      document.getElementById("kpiFoodRatio").textContent = (ratio*100).toFixed(1)+"%";
+    }else{
+      document.getElementById("kpiFoodRatio").textContent = "-";
+    }
+  }catch(e){
+    console.error("loadFoodCost error:", e);
+    tbody.innerHTML = `<tr><td colspan="3" class="err">${diagMsg(e,t)}</td></tr>`;
+  }
+}
+
+// ---- 月份选择器 ----
+function renderMonthPickers(){
+  const t = i18n[currentLang];
+  const salesWrap = document.getElementById("monthPickerSales");
+  const pettyWrap = document.getElementById("monthPickerPetty");
+  const foodWrap = document.getElementById("monthPickerFood");
+  salesWrap.innerHTML = "";
+  pettyWrap.innerHTML = "";
+  foodWrap.innerHTML = "";
+  for(let m=7;m<=12;m++){
+    const label = t.months[m-7];
+    const b1 = document.createElement("button");
+    b1.textContent = label;
+    b1.className = m===currentSalesMonth ? "active":"";
+    b1.onclick = ()=>{ currentSalesMonth=m; renderMonthPickers(); loadSales(m); };
+    salesWrap.appendChild(b1);
+
+    const b2 = document.createElement("button");
+    b2.textContent = label;
+    b2.className = m===currentPettyMonth ? "active":"";
+    b2.onclick = ()=>{ currentPettyMonth=m; renderMonthPickers(); loadPetty(m); };
+    pettyWrap.appendChild(b2);
+
+    const b3 = document.createElement("button");
+    b3.textContent = label;
+    b3.className = m===currentFoodMonth ? "active":"";
+    b3.onclick = ()=>{ currentFoodMonth=m; renderMonthPickers(); loadFoodCost(m); };
+    foodWrap.appendChild(b3);
+  }
+}
+
+function applyStaticI18n(){
+  const t = i18n[currentLang];
+  document.querySelectorAll("[data-i18n]").forEach(el=>{
+    if(i18n[currentLang][el.getAttribute("data-i18n")] !== undefined){
+      el.textContent = t[el.getAttribute("data-i18n")];
+    }
+  });
+}
+
+function setLang(lang){
+  currentLang = lang;
+  document.getElementById("btnZH").classList.toggle("active", lang==="zh");
+  document.getElementById("btnEN").classList.toggle("active", lang==="en");
+  document.documentElement.lang = lang==="zh" ? "zh":"en";
+  applyStaticI18n();
+  renderMonthPickers();
+  loadAll();
+}
+
+async function loadAll(){
+  const now = new Date();
+  document.getElementById("updatedAt").innerHTML = i18n[currentLang].updatedLabel + "<br>" + now.toLocaleString("zh-MY");
+  await Promise.all([
+    loadSales(currentSalesMonth),
+    loadPetty(currentPettyMonth),
+    loadRemit(),
+    loadReview(),
+    loadFoodCost(currentFoodMonth)
+  ]);
+}
+
+applyStaticI18n();
+renderMonthPickers();
+loadAll();
+
+// ---- 密码保护 ----
+const DASHBOARD_PASSWORD = "Talkcrabkepong";
+function checkPassword(){
+  const val = document.getElementById("pwInput").value;
+  if(val === DASHBOARD_PASSWORD){
+    document.getElementById("lockScreen").style.display = "none";
+    document.getElementById("dashboardContent").style.display = "block";
+  }else{
+    document.getElementById("lockError").textContent = currentLang==="zh" ? "密码错误，请重试" : "Wrong password, try again";
+    document.getElementById("pwInput").value = "";
+    document.getElementById("pwInput").focus();
+  }
+}
+document.getElementById("pwInput").addEventListener("keydown", function(e){
+  if(e.key === "Enter") checkPassword();
+});
+</script>
+</body>
+</html>
