@@ -1,6 +1,6 @@
 const { readRange } = require('../lib/sheets');
 
-const SHEET_ID = process.env.KEPONG_SHEET_ID;
+const SHEET_ID = process.env.PETTY_CASH_SHEET_ID;
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
